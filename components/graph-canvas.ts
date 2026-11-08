@@ -117,6 +117,8 @@ export interface CanvasColors {
 	edge: string;
 	label: string;
 	hoverText: string;
+	/** Cluster labels need darker ink on light canvases. Defaults to dark. */
+	mode?: "light" | "dark";
 }
 
 export interface CanvasData {
@@ -496,6 +498,7 @@ export function pickNearest<T extends { id: string; x: number; y: number }>(
 
 /** "#rrggbb" + alpha → "rgba(...)". */
 function rgbaFromHex(hex: string, alpha: number): string {
+	if (hex.length === 4) hex = "#" + hex.slice(1).split("").map(c => c + c).join("");
 	const r = Number.parseInt(hex.slice(1, 3), 16);
 	const g = Number.parseInt(hex.slice(3, 5), 16);
 	const b = Number.parseInt(hex.slice(5, 7), 16);
@@ -780,6 +783,13 @@ export class GraphCanvasRenderer {
 		this.simCenter = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
 		this.buildSim();
 		this.geoVersion++; // new data → rebuild world geometry
+		this.markDirty();
+	}
+
+	/** Repaint a theme change without resetting layout, camera, or pending commits. */
+	setColors(colors: CanvasColors): void {
+		if (!this.data) return;
+		this.data.colors = colors;
 		this.markDirty();
 	}
 
@@ -1725,7 +1735,7 @@ export class GraphCanvasRenderer {
 			const lineH = (settings.clusterLabelSize * REGION_LABEL_LINE_HEIGHT) / k;
 			for (const rm of this.regionMeta) {
 				if (!rm.lines) continue;
-				ctx.fillStyle = `hsla(${rm.hue}, 55%, 78%, 0.85)`;
+				ctx.fillStyle = `hsla(${rm.hue}, 55%, ${this.data?.colors.mode === "light" ? 30 : 78}%, 0.85)`;
 				const firstOffset = (-(rm.lines.length - 1) / 2) * lineH;
 				for (let i = 0; i < rm.lines.length; i++) {
 					ctx.fillText(rm.lines[i]!, rm.cx, rm.cy + firstOffset + i * lineH);

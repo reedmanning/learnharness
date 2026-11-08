@@ -26,12 +26,14 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ModelRole } from "../../config.ts";
 import type { ChatSettings } from "./contracts/chat.ts";
 import type { SearchEngineId } from "./search.ts";
+import { findTheme, resolveThemeColors, type ColorMode, type ThemeColors, type ThemeDefinition } from "./themes.ts";
 import {
 	BACKGROUND_MODEL_ROLES,
 	FACTORY_SETTINGS,
 	MODEL_SLOTS,
 	ROLE_SLOT,
 	type AgentSettings,
+	type AppearanceSettings,
 	type BackgroundModelRole,
 	type FactorySettings,
 	type GeneralSettings,
@@ -67,8 +69,42 @@ export interface EffectiveModelSpec {
 	thinkingLevel?: ThinkingLevel;
 }
 
-/** The concrete appearance view — same shape as the factory's. */
-export type EffectiveAppearance = FactorySettings["appearance"];
+/** The concrete reading preferences and both resolved color palettes. */
+export type EffectiveAppearance = FactorySettings["appearance"] & {
+	theme: string;
+	colors: Record<ColorMode, ThemeColors>;
+};
+
+/** Current overrides, then the saved theme's typography, then factory defaults. */
+export function resolveAppearance(delta: AppearanceSettings | undefined): EffectiveAppearance {
+	const theme = findTheme(delta), f = FACTORY_SETTINGS.appearance, typography = theme.typography;
+	return {
+		mode: delta?.mode ?? f.mode,
+		theme: theme.id,
+		colors: { light: resolveThemeColors(delta, "light"), dark: resolveThemeColors(delta, "dark") },
+		background: delta?.background ?? f.background,
+		fontFamily: delta?.fontFamily !== undefined ? delta.fontFamily : typography?.fontFamily ?? f.fontFamily,
+		proseFontSize: delta?.proseFontSize ?? typography?.proseFontSize ?? f.proseFontSize,
+		sessionNameSerif: delta?.sessionNameSerif ?? typography?.sessionNameSerif ?? f.sessionNameSerif,
+		mdRendering: {
+			headingWeight: delta?.mdRendering?.headingWeight ?? typography?.mdRendering.headingWeight ?? f.mdRendering.headingWeight,
+			boldColor: delta?.mdRendering?.boldColor !== undefined ? delta.mdRendering.boldColor : typography?.mdRendering.boldColor ?? f.mdRendering.boldColor,
+			italicColor: delta?.mdRendering?.italicColor !== undefined ? delta.mdRendering.italicColor : typography?.mdRendering.italicColor ?? f.mdRendering.italicColor,
+		},
+	};
+}
+
+/** Save both palettes and the current reading preferences, independently of the active mode. */
+export function captureTheme(appearance: AppearanceSettings | undefined, id: string, name: string): ThemeDefinition {
+	const resolved = resolveAppearance(appearance);
+	return {
+		id, name: name.trim(), colors: resolved.colors,
+		typography: {
+			fontFamily: resolved.fontFamily, proseFontSize: resolved.proseFontSize,
+			sessionNameSerif: resolved.sessionNameSerif, mdRendering: resolved.mdRendering,
+		},
+	};
+}
 
 /** The concrete view: every knob resolved, no absent fields. */
 export interface EffectiveSettings {
@@ -174,11 +210,7 @@ export function resolveModelSpec(
 export function resolveSettings(record: UserSettings | null): EffectiveSettings {
 	const agent = record?.agent ?? {};
 	const modelsSection = record?.models ?? {};
-	const appearance = record?.appearance ?? {};
-	const md = appearance.mdRendering ?? {};
 	const graph = record?.graph ?? {};
-	const factoryAppearance = FACTORY_SETTINGS.appearance;
-	const factoryMd = factoryAppearance.mdRendering;
 	const models = {} as Record<BackgroundModelRole, EffectiveModelSpec | undefined>;
 	for (const role of BACKGROUND_MODEL_ROLES) {
 		models[role] = resolveModelSpec(role, agent.models?.[role], modelsSection);
@@ -202,18 +234,7 @@ export function resolveSettings(record: UserSettings | null): EffectiveSettings 
 			cheap: resolveSlot(modelsSection.cheap),
 			vision: resolveSlot(modelsSection.vision),
 		},
-		appearance: {
-			mode: appearance.mode ?? factoryAppearance.mode,
-			background: appearance.background ?? factoryAppearance.background,
-			fontFamily: appearance.fontFamily ?? factoryAppearance.fontFamily,
-			proseFontSize: appearance.proseFontSize ?? factoryAppearance.proseFontSize,
-			sessionNameSerif: appearance.sessionNameSerif ?? factoryAppearance.sessionNameSerif,
-			mdRendering: {
-				headingWeight: md.headingWeight ?? factoryMd.headingWeight,
-				boldColor: md.boldColor ?? factoryMd.boldColor,
-				italicColor: md.italicColor ?? factoryMd.italicColor,
-			},
-		},
+		appearance: resolveAppearance(record?.appearance),
 		graph: {
 			// Wave 7 collapse (owner ruling 2026-09-23): the master switch ONLY —
 			// the embedding/clustering/labeling rungs and the BYOK embeddingModel

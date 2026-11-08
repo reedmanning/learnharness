@@ -70,13 +70,13 @@ describe("derivedPalette — the dark curve keeps today's relationships", () => 
 });
 
 describe("appearanceVars — the mapping the provider applies", () => {
-	it("factory appearance: only the always-applied tokens move", () => {
+	it("factory appearance restores the default palette and reading tokens", () => {
 		const vars = appearanceVars(resolveAppearance(undefined));
 		assert.equal(vars["--lh-prose-size"], "16px");
 		assert.equal(vars["--lh-heading-weight"], "900");
 		assert.equal(vars["--font-prose"], undefined, "no font override at factory");
 		assert.equal(vars["--font-title"], undefined, "CMU stays");
-		assert.equal(vars["--background"], undefined, "factory palette untouched");
+		assert.equal(vars["--background"], "#141414", "factory palette restored");
 		assert.equal(vars["--lh-ink-strong"], undefined, "default ink");
 	});
 
@@ -103,7 +103,8 @@ describe("appearanceVars — the mapping the provider applies", () => {
 	it("sessionNameSerif false alone: titles move, nothing else does", () => {
 		const vars = appearanceVars(resolveAppearance({ sessionNameSerif: false }));
 		assert.equal(vars["--font-title"], "var(--font-prose)");
-		assert.equal(Object.keys(vars).length, 3, "prose-size, heading-weight, font-title only");
+		const { "--font-title": title, ...rest } = vars;
+		assert.deepEqual(rest, appearanceVars(resolveAppearance(undefined)), "other tokens unchanged");
 	});
 });
 
@@ -120,7 +121,7 @@ describe("staleVarNames — the removal half of application (owner repro: resets
 		const applied = Object.keys(fullDelta);
 		const factory = appearanceVars(resolveAppearance(undefined));
 		const stale = staleVarNames(applied, factory);
-		assert.ok(stale.includes("--background"));
+		assert.ok(!stale.includes("--background"), "palette is replaced with Default");
 		assert.ok(stale.includes("--font-prose"));
 		assert.ok(stale.includes("--font-title"), "serif toggle back ON must clear the title override");
 		assert.ok(stale.includes("--lh-ink-strong"));
@@ -129,13 +130,13 @@ describe("staleVarNames — the removal half of application (owner repro: resets
 		assert.ok(!stale.includes("--lh-heading-weight"), "always-applied tokens never go stale");
 	});
 
-	it("an empty background commit (null = factory) frees the palette vars", () => {
+	it("an empty legacy background commit (null = factory) restores the palette", () => {
 		const withBg = appearanceVars(resolveAppearance({ background: "#101010" }));
 		const emptied = appearanceVars(resolveAppearance({ background: null }));
 		const stale = staleVarNames(Object.keys(withBg), emptied);
-		assert.ok(stale.includes("--background"));
-		assert.ok(stale.includes("--card"), "the derived palette follows the background out");
-		assert.equal(emptied["--background"], undefined);
+		assert.deepEqual(stale, []);
+		assert.equal(emptied["--background"], "#141414");
+		assert.equal(emptied["--card"], "#1c1c1c");
 	});
 
 	it("no previous applications → nothing stale", () => {

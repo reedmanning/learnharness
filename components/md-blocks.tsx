@@ -42,6 +42,7 @@ import { MermaidError } from "@/components/mermaid-error";
 import { blurAfterPointerClick } from "@/components/focus-hygiene";
 import { chartSize, useSessionMermaid } from "@/components/session-overlay";
 import { Hint } from "@/components/ui/hint";
+import { useAppearance } from "@/components/settings/appearance";
 
 // ─── The one affordance: the hover-reveal corner copy ────────────────────────
 
@@ -139,6 +140,8 @@ export function codeSource(children: ReactNode): string {
  *  still streaming (the trailing open fence), a quiet skeleton instead of a
  *  doomed parse. */
 function MermaidInline({ chart }: { chart: string }) {
+	const { appearance, colorMode } = useAppearance();
+	const colors = appearance.colors[colorMode];
 	const [svg, setSvg] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [attempt, setAttempt] = useState(0);
@@ -166,7 +169,7 @@ function MermaidInline({ chart }: { chart: string }) {
 		let cancelled = false;
 		setSvg(null);
 		setError(null);
-		renderMermaid(chart)
+		renderMermaid(chart, colorMode, colors)
 			.then((s) => {
 				if (!cancelled) setSvg(s);
 			})
@@ -176,7 +179,7 @@ function MermaidInline({ chart }: { chart: string }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [chart, attempt, incomplete]);
+	}, [chart, attempt, incomplete, colorMode, colors]);
 
 	if (incomplete || (svg === null && error === null)) {
 		return (

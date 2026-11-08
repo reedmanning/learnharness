@@ -65,6 +65,8 @@
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TagChanges } from "@/src/core";
+import { themeVariables } from "@/src/core";
+import { useAppearance } from "@/components/settings/appearance";
 import { GraphNotesLinks } from "./session-notes";
 import { NotesImportControl, NotesImportErrors, NotesImportNotices, useNotesImport } from "@/components/notes-import.tsx";
 import Link from "next/link";
@@ -110,10 +112,6 @@ import {
 	toOffSliderPosition,
 	toSliderPosition,
 } from "@/src/core";
-
-/** The uniform node look (no state classes — canvas wants hex, not oklch):
- *  the accent color, until the state model lands. */
-const NODE_COLOR_TOKEN = "--primary";
 
 /** Per-device graph camera persistence (zoom+pan view state). v1 in the
  *  key: the stored shape is the renderer's d3 transform {k, x, y}. */
@@ -193,28 +191,6 @@ export function seedMissingNodePositions(
 		});
 	});
 	return positions;
-}
-
-// ---- Color helpers (canvas wants hex, not oklch) ---------------------------
-
-/** Resolve a CSS variable (oklch in this app) to #rrggbb via the canvas. */
-function cssColorToHex(css: string): string {
-	const canvas = document.createElement("canvas");
-	canvas.width = 1;
-	canvas.height = 1;
-	const ctx = canvas.getContext("2d");
-	if (!ctx) return "#888888";
-	ctx.fillStyle = css;
-	ctx.fillRect(0, 0, 1, 1);
-	const { data } = ctx.getImageData(0, 0, 1, 1);
-	return `#${[data[0]!, data[1]!, data[2]!]
-		.map((v) => v.toString(16).padStart(2, "0"))
-		.join("")}`;
-}
-
-function tokenHex(cssVar: string): string {
-	const value = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-	return value ? cssColorToHex(value) : "#888888";
 }
 
 // ---- Component ------------------------------------------------------------
@@ -943,6 +919,13 @@ export function GraphView({
 	onChainSelectClose?: () => void;
 }) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
+	const { appearance, colorMode } = useAppearance();
+	const canvasColors = useMemo(() => {
+		const vars = themeVariables(appearance.colors[colorMode], colorMode);
+		return { node: vars["--primary"]!, edge: vars["--ring"]!, label: vars["--muted-foreground"]!, hoverText: vars["--foreground"]!, mode: colorMode };
+	}, [appearance, colorMode]);
+	const colorsRef = useRef(canvasColors);
+	colorsRef.current = canvasColors;
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const cardRef = useRef<HTMLDivElement | null>(null);
 	const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
@@ -1400,16 +1383,16 @@ export function GraphView({
 			logicalEdges: snapshot.logicalEdges.map((e) => ({ from: e.from, to: e.to })),
 			impLinks: snapshot.impLinks,
 			clusters: snapshot.clusters.map((c) => ({ id: c.id, label: c.label, members: c.members })),
-			colors: {
-				node: tokenHex(NODE_COLOR_TOKEN),
-				edge: tokenHex("--ring"),
-				label: tokenHex("--muted-foreground"),
-				hoverText: tokenHex("--foreground"),
-			},
+			colors: colorsRef.current,
 			// Match the app typography (Geist via the body's stack).
 			fontFamily: getComputedStyle(document.body).fontFamily,
 		});
 	}, [snapshot, isEmpty]);
+
+	// Appearance is paint-only: never rewind a drag or rebuild graph geometry.
+	useEffect(() => {
+		rendererRef.current?.setColors(canvasColors);
+	}, [canvasColors, snapshot, isEmpty]);
 
 	// Feed #2 — settings: just marks the frame dirty. No rebuild, no
 	// re-layout, no camera touch (the whole point of the new renderer).

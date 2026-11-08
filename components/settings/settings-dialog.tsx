@@ -232,33 +232,39 @@ export function SettingsDialogBody({
 			body: object,
 		) => {
 			setError(null);
-			const res = await fetch(`/api/settings/${section}`, {
-				method: "PUT",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify(body),
-			});
-			if (!res.ok) {
-				const detail = (await res.json().catch(() => ({}))) as {
-					error?: string;
-				};
-				setError(`${section}: ${detail.error ?? res.status}`);
-				return;
+			try {
+				const res = await fetch(`/api/settings/${section}`, {
+					method: "PUT",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(body),
+				});
+				if (!res.ok) {
+					const detail = (await res.json().catch(() => ({}))) as {
+						error?: string;
+					};
+					setError(`${section}: ${detail.error ?? res.status}`);
+					return false;
+				}
+				// Server truth, never the request body (fix wave, owner repro):
+				// the models section clamps pinned thinking levels on write
+				// (bd68486) — a swap that rides an unsupported level lands
+				// CLAMPED in the record, and the writing surface must show the
+				// stored value in this same interaction, not the optimistic one.
+				const reply = (await res.json().catch(() => null)) as { settings?: UserSettings; fileAccessError?: string } | null;
+				const stored = reply?.settings;
+				setFileAccessError(reply?.fileAccessError ?? null);
+				setRecord(
+					(prev) =>
+						stored ?? ({ ...(prev ?? {}), [section]: body }) as UserSettings,
+				);
+				notifySettingsSaved(section);
+				if (section === "appearance")
+					onAppearanceChange(stored ? stored.appearance : body as AppearanceSettings);
+				return true;
+			} catch (error) {
+				setError(`${section}: ${error instanceof Error ? error.message : "Could not save settings"}`);
+				return false;
 			}
-			// Server truth, never the request body (fix wave, owner repro):
-			// the models section clamps pinned thinking levels on write
-			// (bd68486) — a swap that rides an unsupported level lands
-			// CLAMPED in the record, and the writing surface must show the
-			// stored value in this same interaction, not the optimistic one.
-			const reply = (await res.json().catch(() => null)) as { settings?: UserSettings; fileAccessError?: string } | null;
-			const stored = reply?.settings;
-			setFileAccessError(reply?.fileAccessError ?? null);
-			setRecord(
-				(prev) =>
-					stored ?? ({ ...(prev ?? {}), [section]: body }) as UserSettings,
-			);
-			notifySettingsSaved(section);
-			if (section === "appearance")
-				onAppearanceChange(body as AppearanceSettings);
 		},
 		[onAppearanceChange],
 	);
@@ -406,7 +412,7 @@ export function SettingsDialogBody({
 									<AppearanceSection
 										appearance={record.appearance}
 										onSectionChange={(next: AppearanceSettings) =>
-											void write("appearance", next)
+											write("appearance", next)
 										}
 									/>
 								</SettingsSection>

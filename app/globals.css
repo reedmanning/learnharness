@@ -335,7 +335,7 @@ body {
 [data-streamdown="inline-code"],
 [data-streamdown="code-block"] {
 	border: 1px solid var(--border);
-	background: color-mix(in oklab, var(--background) 86%, black);
+	background: var(--lh-code-background, color-mix(in oklab, var(--background) 86%, black));
 }
 [data-streamdown="code-block"] {
 	border-radius: 0.75rem;

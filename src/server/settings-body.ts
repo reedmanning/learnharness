@@ -32,6 +32,7 @@ import { WRITABLE_TOOL_KEYS } from "../core/pending.ts";
 import { isSearchEngineId, SEARCH_ENGINES } from "../core/search.ts";
 import { isDictationLanguage } from "../core/dictation.ts";
 import { parseFileAccessSettings } from "../core/file-access.ts";
+import { PRESET_THEMES, parseCustomTheme, parseThemeColors } from "../core/themes.ts";
 
 /** Parsed-or-rejected — `ok: false` carries the 400's error message. */
 export type SettingsBodyResult<T> =
@@ -231,17 +232,43 @@ function parseHexOrNull(value: unknown, field: string): { color?: string | null;
 	return { color: value };
 }
 
-/** appearance: { mode?, background?, fontFamily?, proseFontSize?,
- *  sessionNameSerif?, mdRendering? } */
+/** Whole appearance section: palette selection, custom library, and reading overrides. */
 export function parseAppearanceSettingsBody(body: unknown): SettingsBodyResult<AppearanceSettings> {
 	const raw = asRecord(body);
 	if (!raw) return { ok: false, error: "Invalid JSON body" };
 	const settings: AppearanceSettings = {};
 	if (raw.mode !== undefined) {
-		if (raw.mode !== "dark" && raw.mode !== "light") {
-			return { ok: false, error: "mode must be \"dark\" or \"light\"" };
+		if (raw.mode !== "dark" && raw.mode !== "light" && raw.mode !== "system") {
+			return { ok: false, error: "mode must be \"dark\", \"light\", or \"system\"" };
 		}
 		settings.mode = raw.mode;
+	}
+	if (raw.customThemes !== undefined) {
+		if (!Array.isArray(raw.customThemes)) return { ok: false, error: "customThemes must be an array" };
+		settings.customThemes = [];
+		const ids = new Set<string>();
+		for (const value of raw.customThemes) {
+			const theme = parseCustomTheme(value);
+			if (!theme || ids.has(theme.id)) return { ok: false, error: "Each custom theme needs a unique ID, a name (1–80 characters), valid light/dark colors, and typography" };
+			ids.add(theme.id);
+			settings.customThemes.push(theme);
+		}
+	}
+	if (raw.theme !== undefined) {
+		if (typeof raw.theme !== "string" || ![...PRESET_THEMES, ...(settings.customThemes ?? [])].some(t => t.id === raw.theme))
+			return { ok: false, error: "Choose an existing theme" };
+		settings.theme = raw.theme;
+	}
+	if (raw.colors !== undefined) {
+		const colors = asRecord(raw.colors);
+		if (!colors) return { ok: false, error: "colors must contain light and/or dark palettes" };
+		settings.colors = {};
+		for (const mode of ["light", "dark"] as const) {
+			if (colors[mode] === undefined) continue;
+			const palette = parseThemeColors(colors[mode], true);
+			if (!palette) return { ok: false, error: `colors.${mode} must use #rgb or #rrggbb colors` };
+			settings.colors[mode] = palette;
+		}
 	}
 	if (raw.background !== undefined) {
 		const parsed = parseHexOrNull(raw.background, "background");

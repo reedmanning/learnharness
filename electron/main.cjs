@@ -727,6 +727,17 @@ async function main() {
 
 	installMenu();
 
+	// Keep the native resize surface and Windows/Linux window controls in
+	// step with the renderer's resolved palette (including system changes).
+	ipcMain.on("lh:appearance", (event, colors) => {
+		const win = BrowserWindow.fromWebContents(event.sender);
+		if (!trustedAppWindows.has(win) || !trustedSender(event, new URL(url).origin, BrowserWindow)) return;
+		const valid = (color) => typeof color === "string" && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(color);
+		if (!colors || !valid(colors.background) || !valid(colors.foreground)) return;
+		win.setBackgroundColor(colors.background);
+		if (process.platform !== "darwin") win.setTitleBarOverlay({ color: colors.background, symbolColor: colors.foreground });
+	});
+
 	// Auto-update (Wave C): wire the updater before the window so the
 	// banner channel is live from first paint; the first check and the 24h
 	// interval fire after it below. setupAutoUpdater's contract: failures

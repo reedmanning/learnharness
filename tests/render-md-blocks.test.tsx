@@ -38,7 +38,7 @@ describe("md-blocks — code", () => {
 		assert.ok(surface, "both code paths share one surface rule");
 		assert.deepEqual(surface.trim().split(/;\s*/).filter(Boolean), [
 			"border: 1px solid var(--border)",
-			"background: color-mix(in oklab, var(--background) 86%, black)",
+			"background: var(--lh-code-background, color-mix(in oklab, var(--background) 86%, black))",
 		], "share the existing block surface, not block layout, padding or radius");
 		assert.match(css, /\[data-streamdown="code-block"\]\s*\{\s*border-radius: 0\.75rem;\s*padding: 0\.375rem;\s*\}/, "block geometry stays block-only and unchanged");
 	});

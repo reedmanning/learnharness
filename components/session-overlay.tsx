@@ -8,6 +8,7 @@ import { renderMermaid } from "@/components/mermaid-render";
 import { MermaidError } from "@/components/mermaid-error";
 import { Hint } from "@/components/ui/hint";
 import { SvgImage } from "@/components/artifacts/svg-image";
+import { useAppearance } from "@/components/settings/appearance";
 
 /**
  * SESSION-SCOPED OVERLAYS (owner wave, 2026-09-19): the "fullscreen"
@@ -85,6 +86,8 @@ export function MermaidOverlay({
 	onClose: () => void;
 }) {
 	// ── chart render (own instance, own ids); figure mode uses the raw svg ──
+	const { appearance, colorMode } = useAppearance();
+	const colors = appearance.colors[colorMode];
 	const [svg, setSvg] = useState<string | null>(rawSvg ?? null);
 	const [error, setError] = useState<string | null>(null);
 	const [attempt, setAttempt] = useState(0);
@@ -98,7 +101,7 @@ export function MermaidOverlay({
 		let cancelled = false;
 		setSvg(null);
 		setError(null);
-		renderMermaid(chart)
+		renderMermaid(chart, colorMode, colors)
 			.then((s) => {
 				if (!cancelled) setSvg(s);
 			})
@@ -108,7 +111,7 @@ export function MermaidOverlay({
 		return () => {
 			cancelled = true;
 		};
-	}, [rawSvg, chart, attempt]);
+	}, [rawSvg, chart, attempt, colorMode, colors]);
 
 	// Esc closes — claimed at the document level (THE ONE-ESC LAW, owner
 	// keyboard round 2026-10-06): one Esc, one action; the window chain

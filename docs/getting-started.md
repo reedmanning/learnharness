@@ -64,6 +64,12 @@ The graph browser and practice picker use the same tag hierarchy. Shared materia
 
 If you delete a session while keeping its graph, the session disappears from Tags, while its concepts keep their tags and session title in the graph. Older material filed directly in a folder is preserved under a **General** tag inside that folder. Sessions and files no longer have a separate folder location.
 
+## Appearance
+
+Open **Settings → Appearance** to choose Default, Paper, or Slate, in **Light**, **Dark**, or **Follow system** mode. Color and typography changes apply immediately. The preview shows how session titles, reading text, emphasis, and controls will look.
+
+Use **Save as theme** to keep your current colors and reading preferences under a name. Each custom theme saves separate light and dark palettes; switch modes to edit either palette. Custom themes can be updated, renamed, or deleted, and **Reset changes** restores the selected theme's saved values. Selecting another theme keeps your custom themes available in the menu. Exported handout PDFs retain their print styling.
+
 ## Data, privacy, and usage
 
 Chats, graph records, settings, and credentials live on your machine. Packaged desktop data normally lives under:

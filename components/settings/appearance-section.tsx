@@ -6,10 +6,8 @@
  * PUT the whole appearance section and hand the delta back so the CSS
  * variables move IMMEDIATELY (the section's whole point — it must DO
  * something). Hex inputs commit on blur/Enter; the background derives the
- * raised/accent/edge palette in code (components/settings/appearance.tsx).
- * Mode is dark-only this wave: control rendered DISABLED with a note — the
- * light palette is the design wave's work, and a lying control is worse
- * than an honest disabled one.
+ * raised/accent/edge palette in core/themes.ts. Presets and custom themes
+ * share that resolver with the root layout and the live provider.
  *
  * Graph graying (owner, 2026-09-20) follows the graph viewer's render-panel
  * convention: the whole row dims when a parent is off (stored values
@@ -34,14 +32,15 @@ import { useEffect, useRef, useState } from "react";
 import {
 	EXTRACTION_CHUNK_TOKENS_FLOOR,
 	resolveSettings,
+	resolveAppearance,
 	type AppearanceSettings,
 	type GraphSettings,
 } from "@/src/core";
 import { MenuShell } from "@/components/menu-shell";
 import { Hint } from "@/components/ui/hint";
-import { useAppearance } from "./appearance.tsx";
+import { ThemeControls } from "./theme-controls.tsx";
 import { FontMenuList } from "./model-menu";
-import { CommitInput, SettingsMenuTrigger, SettingsRow, ThinSelect, Toggle } from "./controls.tsx";
+import { CommitInput, SettingsMenuTrigger, SettingsRow, Toggle } from "./controls.tsx";
 
 /** The factory reading family — the DEFAULT row's identity (unset =
  *  this). Exported for tests. */
@@ -90,15 +89,25 @@ export function composeFontFamily(
 
 export function AppearanceSection({
 	appearance,
-	onSectionChange,
+	onSectionChange: persist,
 }: {
 	/** The record's appearance delta (absent = factory). */
 	appearance: AppearanceSettings | undefined;
 	/** PUT the whole appearance section; the page re-applies on success. */
-	onSectionChange: (next: AppearanceSettings) => void;
+	onSectionChange: (next: AppearanceSettings) => boolean | void | Promise<boolean | void>;
 }) {
-	const { appearance: resolved } = useAppearance();
+	const resolved = resolveAppearance(appearance);
 	const md = appearance?.mdRendering;
+	const [saving, setSaving] = useState(false);
+	const writing = useRef(false);
+	// Appearance is a whole-section write. Keep rapid clicks from sending stale snapshots.
+	const onSectionChange = async (next: AppearanceSettings): Promise<boolean> => {
+		if (writing.current) return false;
+		writing.current = true;
+		setSaving(true);
+		try { return (await persist(next)) !== false; }
+		finally { writing.current = false; setSaving(false); }
+	};
 
 	// The font dropdown's open state + its enumeration cache. undefined =
 	// not enumerated yet (desktop: click-bound queryLocalFonts pending);
@@ -185,25 +194,9 @@ export function AppearanceSection({
 	}, [fontMenuOpen]);
 
 	return (
-		<>
-			<SettingsRow label="Mode" hint="Coming soon" testid="row-mode" dimmed>
-				<ThinSelect value="dark" ariaLabel="mode" onChange={() => {}} testid="select-mode" disabled>
-					<option value="dark">Dark</option>
-				</ThinSelect>
-			</SettingsRow>
-			<SettingsRow
-				label="Background"
-				hint={`Empty = ${resolved.background ?? "#141414"}`}
-				testid="row-background"
-			>
-				<CommitInput
-					value={appearance?.background ?? ""}
-					placeholder="#141414"
-					ariaLabel="background hex"
-					testid="input-background"
-					onCommit={(v) => onSectionChange({ ...appearance, background: v === "" ? null : v })}
-				/>
-			</SettingsRow>
+		<fieldset disabled={saving} aria-busy={saving} className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0">
+			<ThemeControls appearance={appearance} onChange={onSectionChange} />
+			<p className="mt-2 border-t border-border pt-4 text-xs uppercase tracking-widest text-muted-foreground">Typography</p>
 			<SettingsRow
 				label="Reading font"
 				hint={`Empty = ${DEFAULT_READING_FONT}`}
@@ -219,7 +212,7 @@ export function AppearanceSection({
 					{(() => {
 						const triggerButton = (
 							<SettingsMenuTrigger
-								value={appearance?.fontFamily || DEFAULT_READING_FONT}
+								value={resolved.fontFamily || DEFAULT_READING_FONT}
 								aria-label="Reading font"
 								aria-expanded={fontMenuOpen}
 								data-testid="font-trigger"
@@ -244,7 +237,7 @@ export function AppearanceSection({
 						>
 							<FontMenuList
 								families={localFonts === undefined ? undefined : (localFonts ?? [...CURATED_FALLBACK_FONTS])}
-								effectiveFamily={appearance?.fontFamily ?? null}
+								effectiveFamily={resolved.fontFamily}
 								onPick={pickFont}
 								footer={
 									localFonts === undefined
@@ -264,7 +257,7 @@ export function AppearanceSection({
 				<CommitInput
 					type="number"
 					value={String(appearance?.proseFontSize ?? "")}
-					placeholder="16"
+					placeholder={String(resolved.proseFontSize)}
 					ariaLabel="prose font size"
 					testid="input-prose-size"
 					onCommit={(v) => {
@@ -283,7 +276,7 @@ export function AppearanceSection({
 			</SettingsRow>
 			<SettingsRow label="Session names in serif" testid="row-session-serif">
 				<Toggle
-					checked={appearance?.sessionNameSerif ?? true}
+					checked={resolved.sessionNameSerif}
 					label="session names serif"
 					onChange={(on) => onSectionChange({ ...appearance, sessionNameSerif: on })}
 				/>
@@ -292,7 +285,7 @@ export function AppearanceSection({
 				<CommitInput
 					type="number"
 					value={String(md?.headingWeight ?? "")}
-					placeholder="900"
+					placeholder={String(resolved.mdRendering.headingWeight)}
 					ariaLabel="heading weight"
 					testid="input-heading-weight"
 					onCommit={(v) => {
@@ -316,7 +309,7 @@ export function AppearanceSection({
 			    so; explicit hex overrides ride unchanged. */}
 			<SettingsRow label="Bold color" hint="Empty = same as text" testid="row-bold-color">
 				<CommitInput
-					value={md?.boldColor ?? ""}
+					value={resolved.mdRendering.boldColor ?? ""}
 					placeholder="same as text"
 					ariaLabel="bold color"
 					testid="input-bold-color"
@@ -325,14 +318,14 @@ export function AppearanceSection({
 			</SettingsRow>
 			<SettingsRow label="Italic color" hint="Empty = same as text" testid="row-italic-color">
 				<CommitInput
-					value={md?.italicColor ?? ""}
+					value={resolved.mdRendering.italicColor ?? ""}
 					placeholder="same as text"
 					ariaLabel="italic color"
 					testid="input-italic-color"
 					onCommit={(v) => onSectionChange({ ...appearance, mdRendering: { ...md, italicColor: v === "" ? null : v } })}
 				/>
 			</SettingsRow>
-		</>
+		</fieldset>
 	);
 }
 

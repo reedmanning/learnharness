@@ -37,6 +37,7 @@ import type { ChatSettings } from "./contracts/chat.ts";
 import { isSearchEngineId, type SearchEngineId } from "./search.ts";
 import { isDictationLanguage, type DictationLanguage } from "./dictation.ts";
 import { parseFileAccessSettings, type FileAccessSettings } from "./file-access.ts";
+import { parseCustomTheme, parseThemeColors, type AppearanceMode, type ColorMode, type ThemeColors, type ThemeDefinition } from "./themes.ts";
 
 /** The schema version this code understands. Bump ONLY for breaking shape
  *  changes (a field renamed/meaning changed); pure additions never bump. */
@@ -390,10 +391,14 @@ export interface MdRenderingSettings {
 
 /** Appearance settings — mode, colors, type, markdown emphasis. */
 export interface AppearanceSettings {
-	/** "dark" | "light" (default dark). */
-	mode?: "dark" | "light";
-	/** The one user-chosen color; everything else derives per-mode in code.
-	 *  null = the mode's default background. */
+	/** Default dark; system follows the operating system without changing saved palettes. */
+	mode?: AppearanceMode;
+	/** Preset or saved custom theme ID; absent selects Default. */
+	theme?: string;
+	colors?: Partial<Record<ColorMode, Partial<ThemeColors>>>;
+	customThemes?: ThemeDefinition[];
+	/** Legacy dark background override, preserved for existing profiles.
+	 *  New color edits use colors.dark / colors.light. */
 	background?: string | null;
 	/** The main reading font (everything that is Source Sans 3 today), by
 	 *  name — user-chosen from installed fonts. null = Source Sans 3. */
@@ -498,7 +503,7 @@ export interface FactorySettings {
 	general: Required<GeneralSettings>;
 	dictation: Required<DictationSettings>;
 	appearance: {
-		mode: "dark" | "light";
+		mode: AppearanceMode;
 		background: string | null;
 		fontFamily: string | null;
 		proseFontSize: number;
@@ -751,7 +756,25 @@ function sanitizeMdRendering(raw: unknown): MdRenderingSettings {
 
 function sanitizeAppearance(raw: Record<string, unknown>): AppearanceSettings {
 	const out: AppearanceSettings = {};
-	if (raw.mode === "dark" || raw.mode === "light") out.mode = raw.mode;
+	if (raw.mode === "dark" || raw.mode === "light" || raw.mode === "system") out.mode = raw.mode;
+	if (typeof raw.theme === "string" && raw.theme.trim()) out.theme = raw.theme;
+	if (raw.colors && typeof raw.colors === "object" && !Array.isArray(raw.colors)) {
+		const colors: NonNullable<AppearanceSettings["colors"]> = {};
+		for (const mode of ["light", "dark"] as const) {
+			const palette = parseThemeColors((raw.colors as Record<string, unknown>)[mode], true);
+			if (palette) colors[mode] = palette;
+		}
+		out.colors = colors;
+	}
+	if (Array.isArray(raw.customThemes)) {
+		const ids = new Set<string>();
+		out.customThemes = raw.customThemes.flatMap(value => {
+			const theme = parseCustomTheme(value);
+			if (!theme || ids.has(theme.id)) return [];
+			ids.add(theme.id);
+			return [theme];
+		});
+	}
 	if (raw.background !== undefined) out.background = sanitizeHexOrNull(raw.background);
 	if (raw.fontFamily !== undefined) {
 		out.fontFamily = typeof raw.fontFamily === "string" && raw.fontFamily.trim() ? raw.fontFamily : null;
